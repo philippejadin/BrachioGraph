@@ -16,7 +16,7 @@ class BrachioGraph(Plotter):
         turtle: bool = False,  # create a turtle graphics plotter
         turtle_coarseness=None,  # a factor in degrees representing servo resolution
         #  ----------------- geometry of the plotter -----------------
-        bounds: tuple = [-8, 4, 6, 13],  # the maximum rectangular drawing area
+        bounds: tuple = [-5, 3, 5, 12],  # the maximum rectangular drawing area
         inner_arm: float = 8,  # the lengths of the arms
         outer_arm: float = 8,
         #  ----------------- naive calculation values -----------------

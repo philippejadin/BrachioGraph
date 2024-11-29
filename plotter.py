@@ -8,7 +8,7 @@ import readchar
 import tqdm
 import pigpio
 import numpy
-
+from telemetrix import telemetrix
 
 class Plotter:
     def __init__(
@@ -72,6 +72,10 @@ class Plotter:
         self.servo_1_parked_angle = servo_1_parked_angle
         self.hysteresis_correction_1 = hysteresis_correction_1
 
+        self.inner_pin = 9
+        self.outer_pin = 10
+        self.pen_pin = 11
+
         if servo_1_angle_pws_bidi:
             # use the bi-directional values to obtain mean values, and a hysteresis correction value
             servo_1_angle_pws = []
@@ -126,20 +130,19 @@ class Plotter:
 
         else:
             try:
-                pigpio.exceptions = False
+               
                 # instantiate this Raspberry Pi as a pigpio.pi() instance
-                self.rpi = pigpio.pi()
-                # the pulse frequency should be no higher than 100Hz - higher values could
-                # (supposedly) # damage the servos
-                self.rpi.set_PWM_frequency(14, 50)
-                self.rpi.set_PWM_frequency(15, 50)
-                pigpio.exceptions = True
+                self.board = telemetrix.Telemetrix()
+                self.board.set_pin_mode_servo(self.inner_pin)
+                self.board.set_pin_mode_servo(self.outer_pin)
+                self.board.set_pin_mode_servo(self.pen_pin)
+               
                 self.virtual = False
                 # by default we use a wait factor of 0.01 seconds for better control
                 self.wait = wait if wait is not None else 0.01
 
             except AttributeError:
-                print("pigpio daemon is not available; running in virtual mode")
+                print("arduino is not available; running in virtual mode")
                 self.virtualise()
                 self.wait = wait if wait is not None else 0
 
@@ -636,10 +639,19 @@ class Plotter:
 
     # ----------------- physical control methods -----------------
 
+    def map_range(self, x, in_min, in_max, out_min, out_max):
+        return (x - in_min) * (out_max - out_min) // (in_max - in_min) + out_min
+
+
     def set_pulse_widths(self, pw_1=None, pw_2=None):
         """Applies the supplied pulse-width values to the servos, or pretends to, if we're in
         virtual mode.
         """
+
+
+    
+        self.virtual_pw_1 = int(pw_1)
+        self.virtual_pw_2 = int(pw_2)
 
         if self.virtual:
 
@@ -657,25 +669,42 @@ class Plotter:
 
         else:
 
+            
+
             if pw_1:
-                self.rpi.set_servo_pulsewidth(14, pw_1)
+                
+                angle_1 = self.map_range(int(pw_1), 500, 2500, 0, 180)
+
+                if (angle_1 < 0) : angle_1 = 0 
+                if (angle_1 > 180) : angle_1 = 180 
+                #print(f"{pw_1}")
+                #print(f"{angle_1}")
+                self.board.servo_write(self.inner_pin, angle_1) 
+                #self.rpi.set_servo_pulsewidth(14, pw_1)
             if pw_2:
-                self.rpi.set_servo_pulsewidth(15, pw_2)
+                angle_2 = self.map_range(int(pw_2), 500, 2500, 0, 180)
+                if (angle_2 < 0) : angle_2 = 0 
+                if (angle_2 > 180) : angle_2 = 180 
+                #print(f"{pw_2}")
+                #print(f"{angle_2}")
+                self.board.servo_write(self.outer_pin, angle_2) 
+                #self.rpi.set_servo_pulsewidth(15, pw_2)
 
     def get_pulse_widths(self):
         """Returns the actual pulse-widths values; if in virtual mode, returns the nominal values -
         i.e. the values that they might be.
         """
+        actual_pulse_width_1 = self.virtual_pw_1
+        actual_pulse_width_2 = self.virtual_pw_2
+        #if self.virtual:
 
-        if self.virtual:
+        #    actual_pulse_width_1 = self.virtual_pw_1
+        #    actual_pulse_width_2 = self.virtual_pw_2
 
-            actual_pulse_width_1 = self.virtual_pw_1
-            actual_pulse_width_2 = self.virtual_pw_2
+        #else:
 
-        else:
-
-            actual_pulse_width_1 = self.rpi.get_servo_pulsewidth(14)
-            actual_pulse_width_2 = self.rpi.get_servo_pulsewidth(15)
+        #    actual_pulse_width_1 = self.rpi.get_servo_pulsewidth(14)
+        #    actual_pulse_width_2 = self.rpi.get_servo_pulsewidth(15)
 
         return (actual_pulse_width_1, actual_pulse_width_2)
 
@@ -903,13 +932,7 @@ class Pen:
         self.position = "down"
         self.virtual = virtual
         if self.virtual:
-
             print("Initialising virtual Pen")
-
-        else:
-
-            self.rpi = pigpio.pi()
-            self.rpi.set_PWM_frequency(self.pin, 50)
 
         self.up()
 
@@ -957,7 +980,8 @@ class Pen:
 
         for i in range(abs(diff)):
             angle += length_of_step
-            self.rpi.set_servo_pulsewidth(self.pin, angle)
+            #self.board.servo_write(self.pen_pin, angle) 
+            # self.rpi.set_servo_pulsewidth(self.pin, angle)
             sleep(0.001)
 
     # for convenience, a quick way to set pen motor pulse-widths
@@ -966,8 +990,8 @@ class Pen:
         if self.virtual:
             self.virtual_pw = pulse_width
 
-        else:
-            self.rpi.set_servo_pulsewidth(self.pin, pulse_width)
+        #else:
+            #self.rpi.set_servo_pulsewidth(self.pin, pulse_width)
 
     # for convenience, a quick way to get pen motor pulse-widths
     def get_pw(self):
@@ -975,5 +999,5 @@ class Pen:
         if self.virtual:
             return self.virtual_pw
 
-        else:
-            return self.rpi.get_servo_pulsewidth(self.pin)
+        #else:
+            #return self.rpi.get_servo_pulsewidth(self.pin)
